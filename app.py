@@ -4,7 +4,7 @@ from pathlib import Path
 import logging
 from typing import Dict, List, Any, Optional, Union
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -325,13 +325,13 @@ async def predict_rank(user_id: str):
 
 @app.get("/visualizations/{user_id}",
          response_model=VisualizationResponse,
-         tags=["Student Reports"],
-         summary="Get Performance Visualizations",
-         description="Get visual representations of your performance trends")
+         tags=["Progress Tracking"],
+         summary="View Your Performance Charts",
+         description="Get visual representations of your performance and progress")
 async def get_visualizations(
-    user_id: str = PathParam(..., description="Your student ID")
+    user_id: str = Path(..., description="Your student ID")
 ):
-    """Generate visual analysis of student performance."""
+    """Generate visual representations of student performance."""
     try:
         logger.info(f"Generating visualizations for student {user_id}")
         
@@ -348,95 +348,69 @@ async def get_visualizations(
         if current_quiz:
             quiz_history.append(current_quiz)
             
-        # Process data
         processed_history = data_processor.process_historical_data(quiz_history)
         performance = performance_analyzer.analyze_student_performance(processed_history)
         
-        # Format dates and sort chronologically
-        dates = [quiz['submitted_at'] for quiz in quiz_history]
-        dates.sort()
-        
-        # Overall Performance Trend
-        overall_trend = {
-            "type": "line",
-            "labels": dates,
-            "datasets": [
-                {
-                    "label": "Overall Score",
-                    "data": [float(quiz['score']) for quiz in quiz_history],
-                    "borderColor": "#2563eb",
-                    "fill": False
-                }
-            ],
-            "title": "Your Performance Over Time"
+        # Generate visualization data
+        charts = {
+            "performance_trend_chart": chart_generator.generate_performance_trend(quiz_history),
+            "topic_performance_chart": chart_generator.generate_topic_performance(
+                performance.topic_wise_accuracy
+            ),
+            "weak_areas_chart": chart_generator.generate_weak_areas_chart(
+                {topic: acc for topic, acc in performance.topic_wise_accuracy.items() 
+                 if topic in performance.weak_areas}
+            ),
+            "improvement_trends_chart": chart_generator.generate_improvement_chart(
+                performance.improvement_trends
+            ),
+            "difficulty_distribution_chart": {
+                'type': 'bar',
+                'data': [],  # We'll calculate this from quiz_history
+                'axes': {
+                    'x': {'label': 'Difficulty Level', 'dataKey': 'difficulty'},
+                    'y': {'label': 'Questions Count'}
+                },
+                'series': [
+                    {'name': 'Total Questions', 'dataKey': 'total', 'color': '#64748b'},
+                    {'name': 'Correct Answers', 'dataKey': 'correct', 'color': '#2563eb'}
+                ]
+            }
         }
         
-        # Topic-wise Performance
-        topic_scores = {
-            "type": "bar",
-            "labels": list(performance.topic_wise_accuracy.keys()),
-            "datasets": [{
-                "label": "Score by Subject",
-                "data": [round(score * 100, 2) for score in performance.topic_wise_accuracy.values()],
-                "backgroundColor": "#2563eb"
-            }],
-            "title": "Performance by Subject"
+        # Calculate difficulty distribution data
+        difficulty_stats = {
+            'Easy': {'total': 0, 'correct': 0},
+            'Medium': {'total': 0, 'correct': 0},
+            'Hard': {'total': 0, 'correct': 0}
         }
         
-        # Weak Areas Analysis
-        weak_areas = {
-            "type": "horizontalBar",
-            "labels": performance.weak_areas,
-            "datasets": [{
-                "label": "Current Score",
-                "data": [
-                    round(performance.topic_wise_accuracy[topic] * 100, 2)
-                    for topic in performance.weak_areas
-                ],
-                "backgroundColor": "#ef4444"
-            }],
-            "title": "Areas Needing Improvement"
-        }
+        for quiz in quiz_history:
+            for question in quiz['questions']:
+                level = question['difficulty']
+                difficulty_stats[level]['total'] += 1
+                if question['is_correct']:
+                    difficulty_stats[level]['correct'] += 1
         
-        # Difficulty Level Analysis
-        difficulty_data = {
-            "type": "bar",
-            "labels": ["Easy", "Medium", "Hard"],
-            "datasets": [
-                {
-                    "label": "Accuracy by Difficulty",
-                    "data": [
-                        round(performance.difficulty_analysis[level] * 100, 2)
-                        for level in ["Easy", "Medium", "Hard"]
-                    ],
-                    "backgroundColor": ["#22c55e", "#f59e0b", "#ef4444"]
-                }
-            ],
-            "title": "Performance by Question Difficulty"
-        }
+        charts['difficulty_distribution_chart']['data'] = [
+            {
+                'difficulty': level,
+                'total': stats['total'],
+                'correct': stats['correct'],
+                'accuracy': round((stats['correct'] / stats['total'] * 100), 2) if stats['total'] > 0 else 0
+            }
+            for level, stats in difficulty_stats.items()
+        ]
         
-        # Improvement Trends
-        improvement_data = {
-            "type": "line",
-            "labels": [f"Quiz {i+1}" for i in range(len(dates))],
-            "datasets": [
-                {
-                    "label": topic,
-                    "data": [round(score * 100, 2) for score in scores],
-                    "borderColor": f"hsl({i * 45}, 70%, 50%)"
-                }
-                for i, (topic, scores) in enumerate(performance.improvement_trends.items())
-            ],
-            "title": "Progress by Subject"
-        }
+        # Ensure all numeric values are properly formatted
+        for chart in charts.values():
+            chart['data'] = [
+                {k: (round(v, 2) if isinstance(v, float) else v) 
+                 for k, v in item.items()}
+                for item in chart['data']
+            ]
         
-        return JSONResponse(content={
-            "overall_performance": overall_trend,
-            "topic_wise_scores": topic_scores,
-            "weak_areas": weak_areas,
-            "difficulty_analysis": difficulty_data,
-            "improvement_trends": improvement_data
-        })
+        return JSONResponse(content=charts)
         
     except Exception as e:
         logger.error(f"Error generating visualizations: {str(e)}")
