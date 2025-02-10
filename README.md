@@ -30,7 +30,7 @@ A powerful backend system for analyzing NEET exam performance and predicting ran
 - **Language:** Python 3.9+ 🐍
 - **Data Processing:** Pandas, NumPy 📊
 - **Visualization:** Chart.js data formats 📉
-- **Documentation:** Swagger UI / OpenAPI 📚
+- **Documentation:** Swagger UI 📚
 - **Testing:** pytest 🧪
 - **Development:** uvicorn 🦄
 
@@ -151,7 +151,7 @@ pytest tests/
 
 GitHub ID - [@akashgh003](https://github.com/akashgh003)
 
-Project Link: [https://github.com/yourusername/neet-rank-predictor](https://github.com/yourusername/neet-rank-predictor)
+Project Link: [https://github.com/akashgh003/backend_NEET-rank-predict/tree/main](https://github.com/akashgh003/backend_NEET-rank-predict/tree/main)
 
 ---
 
